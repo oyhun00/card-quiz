@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { QuestionBank, QuizItem } from '../types'
 import { shuffle } from '../shuffle'
 import { isCorrectAnswer } from '../answerCheck'
@@ -18,6 +18,8 @@ export function QuizPanel({ bank }: Props) {
   const [lastOk, setLastOk] = useState<boolean | null>(null)
   const [score, setScore] = useState(0)
   const [answered, setAnswered] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const lastSubmitAtRef = useRef<number>(0)
 
   useEffect(() => {
     if (bank.sections.length === 0) return
@@ -48,6 +50,7 @@ export function QuizPanel({ bank }: Props) {
 
   const submit = useCallback(() => {
     if (phase !== 'running' || !current || answered) return
+    lastSubmitAtRef.current = Date.now()
     const ok = isCorrectAnswer(current, input)
     setLastOk(ok)
     if (ok) setScore((s) => s + 1)
@@ -91,13 +94,23 @@ export function QuizPanel({ bank }: Props) {
     const onWindowKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' || e.shiftKey) return
       // 입력칸이 disabled 상태면 keydown이 안 들어올 수 있어서(= '다음'이 안 됨) 윈도우에서 보정
+      // 답 입력 중에는 Enter=채점(기존 input onKeyDown)만, 채점 후 화면에서는 Enter=다음만 동작
+      if (!answered) return
+      // 채점 직후 Enter 키 반복으로 즉시 다음으로 넘어가는 것을 방지
+      if (Date.now() - lastSubmitAtRef.current < 250) return
       e.preventDefault()
-      if (answered) next()
-      else submit()
+      next()
     }
     window.addEventListener('keydown', onWindowKeyDown)
     return () => window.removeEventListener('keydown', onWindowKeyDown)
-  }, [phase, answered, next, submit])
+  }, [phase, answered, next])
+
+  useEffect(() => {
+    if (phase !== 'running') return
+    if (answered) return
+    const raf = window.requestAnimationFrame(() => inputRef.current?.focus())
+    return () => window.cancelAnimationFrame(raf)
+  }, [phase, index, answered])
 
   if (bank.sections.length === 0) {
     return <p className="muted">데이터 탭에서 문제 은행을 먼저 넣어 주세요.</p>
@@ -153,6 +166,7 @@ export function QuizPanel({ bank }: Props) {
             <input
               type="text"
               className="inp"
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
