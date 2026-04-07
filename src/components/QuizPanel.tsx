@@ -86,6 +86,19 @@ export function QuizPanel({ bank }: Props) {
     [answered, next, submit],
   )
 
+  useEffect(() => {
+    if (phase !== 'running') return
+    const onWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.shiftKey) return
+      // 입력칸이 disabled 상태면 keydown이 안 들어올 수 있어서(= '다음'이 안 됨) 윈도우에서 보정
+      e.preventDefault()
+      if (answered) next()
+      else submit()
+    }
+    window.addEventListener('keydown', onWindowKeyDown)
+    return () => window.removeEventListener('keydown', onWindowKeyDown)
+  }, [phase, answered, next, submit])
+
   if (bank.sections.length === 0) {
     return <p className="muted">데이터 탭에서 문제 은행을 먼저 넣어 주세요.</p>
   }
